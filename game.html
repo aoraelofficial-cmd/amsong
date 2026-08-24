@@ -1,0 +1,600 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>말씀 테트리스 - 암송 게임</title>
+<style>
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; user-select: none; }
+  html, body {
+    margin: 0; padding: 0; width: 100%; height: 100vh;
+    background: radial-gradient(circle at 50% 0%, #1a2b57, #0a1330);
+    font-family: 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif;
+    color: #fff; overflow: hidden; touch-action: none;
+    display: flex; flex-direction: column; align-items: center;
+    position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+  }
+  #topbar {
+    width: 100%; max-width: 480px; padding: 6px 12px;
+    display: flex; justify-content: space-between; align-items: center;
+    font-size: 12px; background: rgba(0,0,0,0.3); flex-shrink: 0;
+  }
+  #verseSelect { display: flex; gap: 6px; }
+  .verseBtn {
+    background: #2c3e70; border: 1px solid #4a6fd4; color: #fff;
+    padding: 5px 10px; border-radius: 8px; font-size: 12px; cursor: pointer;
+  }
+  .verseBtn.active { background: #4a6fd4; }
+  #stats { font-size: 12px; opacity: 0.95; text-align: right; line-height:1.4; }
+
+  #progressBox {
+    width: 100%; max-width: 480px;
+    background: rgba(255,255,255,0.06); margin: 0; border-radius: 8px;
+    padding: 6px 10px; font-size: 12px; line-height: 1.5; max-height: 70px;
+    overflow-y: auto; border: 1px solid rgba(255,255,255,0.15); flex-shrink: 0;
+  }
+  #progressBox .refline { font-size:11px; opacity:0.6; margin-bottom:3px; }
+  #progressBox span.filled { color: #7CFC9E; font-weight: bold; }
+  #progressBox span.pending { color: rgba(255,255,255,0.3); }
+
+  #gameArea {
+    flex: 1; width: 100%; max-width: 480px; display: flex; justify-content: flex-start;
+    align-items: flex-start; overflow: visible; min-height: 0; position: relative;
+    padding-left: 10px; padding-top: 5px;
+  }
+  #boardWrap { position: relative; margin-left: 0; }
+  canvas#board { background: rgba(0,0,0,0.35); border-radius: 6px; border: 2px solid #33447a; display:block; }
+  #nextLabel { position:absolute; top:-2px; right:-72px; font-size:11px; opacity:0.8; }
+  #nextCanvasWrap { position:absolute; top:16px; right:-72px; background:rgba(0,0,0,0.3); border:1px solid #33447a; border-radius:6px; }
+  #controlsRight { position:absolute; top:100px; right:-72px; display:flex; flex-direction:column; gap:8px; }
+
+  #msg {
+    position: absolute; top: 40%; left: 50%; transform: translate(-50%,-50%);
+    font-size: 18px; font-weight: bold; text-align: center; z-index: 10;
+    background: rgba(0,0,0,0.75); padding: 18px 24px; border-radius: 12px;
+    display: none; white-space: pre-line; line-height:1.5;
+  }
+
+  #controls {
+    display: flex; gap: 6px;
+    padding: 6px; width: 100%; max-width: 480px; flex-shrink: 0;
+    background: rgba(0,0,0,0.3); justify-content: center;
+  }
+  #controls button {
+    padding: 8px 0; font-size: 13px; font-weight:bold;
+    background: #555f8a; color: #fff; border: none; border-radius: 8px; flex:1;
+  }
+  #controls button:active { background:#6f8dff; }
+  .ctrlBtn {
+    width: 64px; height: 64px; padding: 0; font-size: 20px; font-weight:bold;
+    background: #4a6fd4; color: #fff; border: none; border-radius: 8px;
+  }
+  .ctrlBtn:active { background:#6f8dff; }
+</style>
+</head>
+<body>
+
+<audio id="bgMusic" loop>
+  <source src="audio/game-song.mp3" type="audio/mpeg">
+</audio>
+
+<div id="topbar">
+  <button onclick="window.location.href='index.html'" style="background:#555f8a; border:none; color:#fff; padding:6px 12px; border-radius:6px; font-size:12px; cursor:pointer;">← 홈</button>
+  <div id="verseSelect">
+    <button class="verseBtn active" data-v="1">마태복음 4:19</button>
+    <button class="verseBtn" data-v="2">요한복음 20:21</button>
+  </div>
+  <div id="stats">점수: <span id="score">0</span> / 라인: <span id="lines">0</span><br>레벨: <span id="level">1</span></div>
+</div>
+
+<div id="progressBox"><div class="refline"></div></div>
+
+<div id="gameArea">
+  <div id="boardWrap">
+    <canvas id="board"></canvas>
+    <div id="nextLabel">NEXT</div>
+    <div id="nextCanvasWrap"><canvas id="nextCanvas" width="60" height="60"></canvas></div>
+    <div id="controlsRight">
+      <button class="ctrlBtn" id="rotateBtn">⟳</button>
+      <button class="ctrlBtn" id="leftBtn">◀</button>
+      <button class="ctrlBtn" id="rightBtn">▶</button>
+      <button class="ctrlBtn" id="dropBtn" style="background:#b0453a;">⏬</button>
+    </div>
+  </div>
+  <div id="msg"></div>
+</div>
+
+<div id="controls">
+  <button id="pauseBtn">일시정지</button>
+  <button id="restartBtn">다시하기</button>
+</div>
+
+<script>
+/* ===================== 성경 구절 데이터 (JSON) ===================== */
+const VERSES = {
+  1: {
+    ref: "마태복음 4:19",
+    text: "말씀하시되 나를 따라오라 내가 너희를 사람을 낚는 어부가 되게 하리라 하시니"
+  },
+  2: {
+    ref: "요한복음 20:21",
+    text: "예수께서 또 이르시되 너희에게 평강이 있을지어다 아버지께서 나를 보내신 것 같이 나도 너희를 보내노라"
+  }
+};
+
+/* ===================== 테트로미노 모양 정의 (4x4 매트릭스, 0/1 회전 상태들) ===================== */
+const SHAPES = {
+  I: [
+    [[0,0,0,0],[1,1,1,1],[0,0,0,0],[0,0,0,0]],
+    [[0,0,1,0],[0,0,1,0],[0,0,1,0],[0,0,1,0]]
+  ],
+  O: [
+    [[1,1],[1,1]]
+  ],
+  T: [
+    [[0,1,0],[1,1,1],[0,0,0]],
+    [[0,1,0],[0,1,1],[0,1,0]],
+    [[0,0,0],[1,1,1],[0,1,0]],
+    [[0,1,0],[1,1,0],[0,1,0]]
+  ],
+  S: [
+    [[0,1,1],[1,1,0],[0,0,0]],
+    [[0,1,0],[0,1,1],[0,0,1]]
+  ],
+  Z: [
+    [[1,1,0],[0,1,1],[0,0,0]],
+    [[0,0,1],[0,1,1],[0,1,0]]
+  ],
+  J: [
+    [[1,0,0],[1,1,1],[0,0,0]],
+    [[0,1,1],[0,1,0],[0,1,0]],
+    [[0,0,0],[1,1,1],[0,0,1]],
+    [[0,1,0],[0,1,0],[1,1,0]]
+  ],
+  L: [
+    [[0,0,1],[1,1,1],[0,0,0]],
+    [[0,1,0],[0,1,0],[0,1,1]],
+    [[0,0,0],[1,1,1],[1,0,0]],
+    [[1,1,0],[0,1,0],[0,1,0]]
+  ]
+};
+const SHAPE_KEYS = Object.keys(SHAPES);
+const COLORS = {
+  I: '#4dd0e1', O: '#ffd54f', T: '#ba68c8', S: '#81c784',
+  Z: '#e57373', J: '#64b5f6', L: '#ffb74d'
+};
+
+/* ===================== 게임 상태 ===================== */
+const COLS = 9, ROWS = 15;
+let CELL = 26; // 동적으로 계산됨
+
+let currentVerseKey = 1;
+let words = [];       // 정답 순서 단어 배열
+let charSeq = [];     // 구절 전체를 글자 단위로 펼친 배열(공백 제외), 순서대로 블록에 채움
+let nextIndex = 0;    // 다음에 채워야 할 글자 인덱스 (charSeq 기준)
+let grid = [];         // ROWS x COLS, null 또는 {ch, color}
+let score = 0, lines = 0, level = 1;
+let paused = false, gameOver = false;
+let dropInterval = 800;
+let dropCounter = 0;
+let lastTime = 0;
+let softDrop = false;
+
+let piece = null;   // {key, rot, row, col, matrix}
+let nextPiece = null;
+
+const canvas = document.getElementById('board');
+const ctx = canvas.getContext('2d');
+const nextCanvas = document.getElementById('nextCanvas');
+const nextCtx = nextCanvas.getContext('2d');
+const progressBox = document.getElementById('progressBox');
+const scoreEl = document.getElementById('score');
+const linesEl = document.getElementById('lines');
+const levelEl = document.getElementById('level');
+const msgEl = document.getElementById('msg');
+
+function buildCharSeq(text) {
+  return text.split('').filter(c => c !== ' ');
+}
+
+function resizeCanvas() {
+  const gameArea = document.getElementById('gameArea');
+  const maxW = Math.min(gameArea.clientWidth - 90, 380);
+  const maxH = gameArea.clientHeight - 10;
+  CELL = Math.floor(Math.min(maxW / COLS, maxH / ROWS));
+  CELL = Math.max(CELL, 16);
+  canvas.width = CELL * COLS;
+  canvas.height = CELL * ROWS;
+}
+
+function initGame() {
+  const v = VERSES[currentVerseKey];
+  words = v.text.split(/\s+/).filter(w=>w.length>0);
+  charSeq = buildCharSeq(v.text);
+  nextIndex = 0;
+  score = 0; lines = 0; level = 1;
+  dropInterval = 800;
+  gameOver = false; paused = false;
+  grid = Array.from({length: ROWS}, () => Array(COLS).fill(null));
+  scoreEl.textContent = score;
+  linesEl.textContent = lines;
+  levelEl.textContent = level;
+  msgEl.style.display = 'none';
+  document.getElementById('pauseBtn').textContent = '일시정지';
+  resizeCanvas();
+  spawnPiece(true);
+  renderProgress();
+  lastTime = 0;
+  dropCounter = 0;
+  requestAnimationFrame(loop);
+}
+
+function nextChar() {
+  if (nextIndex >= charSeq.length) nextIndex = 0; // 구절 반복
+  return charSeq[nextIndex];
+}
+
+function makePiece(key) {
+  const rotations = SHAPES[key];
+  const matrix = rotations[0];
+  const size = matrix.length;
+  // 각 셀에 글자 채우기 (블록 모양 셀 수만큼 charSeq에서 순서대로 가져옴, 로컬 포인터 사용)
+  return { key, rot: 0, matrix, row: 0, col: Math.floor((COLS - size)/2), chars: assignChars(key, 0) };
+}
+
+let localCharPointer = 0; // 조각에 글자를 배정할 때 쓰는 포인터(진행 인덱스와 별개, 미리보기용)
+
+function assignChars(key, rotIdx) {
+  const matrix = SHAPES[key][rotIdx];
+  const chars = {};
+  let ptr = localCharPointer;
+  for (let r=0;r<matrix.length;r++){
+    for(let c=0;c<matrix[r].length;c++){
+      if (matrix[r][c]) {
+        chars[r+','+c] = charSeq[ptr % charSeq.length];
+        ptr++;
+      }
+    }
+  }
+  return chars;
+}
+
+function spawnPiece(first) {
+  const key = nextPiece ? nextPiece.key : SHAPE_KEYS[Math.floor(Math.random()*SHAPE_KEYS.length)];
+  localCharPointer = nextIndex;
+  piece = makePiece(key);
+  const nk = SHAPE_KEYS[Math.floor(Math.random()*SHAPE_KEYS.length)];
+  // 프리뷰용 다음 조각 문자 포인터는 현재 조각 셀 수만큼 뒤로
+  nextPiece = { key: nk };
+  drawNext();
+
+  if (collides(piece.matrix, piece.row, piece.col)) {
+    endGame(false);
+  }
+}
+
+function collides(matrix, row, col) {
+  for (let r=0;r<matrix.length;r++){
+    for(let c=0;c<matrix[r].length;c++){
+      if (!matrix[r][c]) continue;
+      const gr = row+r, gc = col+c;
+      if (gc < 0 || gc >= COLS || gr >= ROWS) return true;
+      if (gr >= 0 && grid[gr][gc]) return true;
+    }
+  }
+  return false;
+}
+
+function rotateMatrix(key, rot) {
+  const rotations = SHAPES[key];
+  return rotations[rot % rotations.length];
+}
+
+function tryRotate() {
+  if (gameOver || paused) return;
+  const rotations = SHAPES[piece.key];
+  const newRot = (piece.rot + 1) % rotations.length;
+  const newMatrix = rotations[newRot];
+  // 간단 wall-kick: 그대로, 왼쪽으로 1,2칸, 오른쪽으로 1,2칸 시도
+  const kicks = [0,-1,1,-2,2];
+  for (const k of kicks) {
+    if (!collides(newMatrix, piece.row, piece.col+k)) {
+      piece.rot = newRot;
+      piece.matrix = newMatrix;
+      piece.col += k;
+      // 회전 시 글자 재배정 (같은 포인터 시작점 유지, 모양이 바뀌어도 셀 수는 동일)
+      piece.chars = assignCharsForMatrix(newMatrix, piece.startPtr !== undefined ? piece.startPtr : localCharPointerForPiece(piece));
+      return;
+    }
+  }
+}
+
+// 조각 생성 시 시작 포인터 저장
+function localCharPointerForPiece(p) { return p.startPtr; }
+
+function assignCharsForMatrix(matrix, startPtr) {
+  const chars = {};
+  let ptr = startPtr;
+  for (let r=0;r<matrix.length;r++){
+    for(let c=0;c<matrix[r].length;c++){
+      if (matrix[r][c]) {
+        chars[r+','+c] = charSeq[ptr % charSeq.length];
+        ptr++;
+      }
+    }
+  }
+  return chars;
+}
+
+// makePiece 재정의: startPtr 저장
+function makePiece(key) {
+  const rotations = SHAPES[key];
+  const matrix = rotations[0];
+  const size = matrix.length;
+  const startPtr = nextIndex;
+  return { key, rot:0, matrix, row:0, col: Math.floor((COLS-size)/2), startPtr, chars: assignCharsForMatrix(matrix, startPtr) };
+}
+
+function tryMove(dx) {
+  if (gameOver || paused) return;
+  if (!collides(piece.matrix, piece.row, piece.col+dx)) {
+    piece.col += dx;
+  }
+}
+
+function softDropStep() {
+  if (gameOver || paused) return;
+  if (!collides(piece.matrix, piece.row+1, piece.col)) {
+    piece.row += 1;
+    score += 1;
+    scoreEl.textContent = score;
+  } else {
+    lockPiece();
+  }
+}
+
+function hardDrop() {
+  if (gameOver || paused) return;
+  let d = 0;
+  while (!collides(piece.matrix, piece.row+1, piece.col)) {
+    piece.row += 1; d++;
+  }
+  score += d*2;
+  scoreEl.textContent = score;
+  lockPiece();
+}
+
+function lockPiece() {
+  const matrix = piece.matrix;
+  for (let r=0;r<matrix.length;r++){
+    for (let c=0;c<matrix[r].length;c++){
+      if (matrix[r][c]) {
+        const gr = piece.row+r, gc = piece.col+c;
+        if (gr>=0 && gr<ROWS) {
+          grid[gr][gc] = { ch: piece.chars[r+','+c], color: COLORS[piece.key] };
+        }
+      }
+    }
+  }
+  // 진행 인덱스는 이 조각이 차지한 셀 수만큼 전진
+  let cellCount = 0;
+  matrix.forEach(row => row.forEach(v => { if (v) cellCount++; }));
+  nextIndex = (piece.startPtr + cellCount);
+  if (charSeq.length>0) nextIndex = nextIndex % charSeq.length === 0 && nextIndex>0 ? charSeq.length : nextIndex % (charSeq.length*1000);
+  nextIndex = nextIndex % charSeq.length;
+
+  clearLines();
+  renderProgress();
+  spawnPiece(false);
+}
+
+function clearLines() {
+  let cleared = 0;
+  for (let r=ROWS-1;r>=0;r--) {
+    if (grid[r].every(cell => cell !== null)) {
+      grid.splice(r,1);
+      grid.unshift(Array(COLS).fill(null));
+      cleared++;
+      r++; // 같은 인덱스 재검사
+    }
+  }
+  if (cleared>0) {
+    const points = [0,100,300,500,800][cleared] || cleared*250;
+    score += points * level;
+    lines += cleared;
+    scoreEl.textContent = score;
+    linesEl.textContent = lines;
+    const newLevel = Math.floor(lines/10)+1;
+    if (newLevel !== level) {
+      level = newLevel;
+      levelEl.textContent = level;
+      dropInterval = Math.max(150, 800 - (level-1)*70);
+    }
+  }
+}
+
+function renderProgress() {
+  const v = VERSES[currentVerseKey];
+  // nextIndex 기준으로 진행률 표시(전체 글자 중 몇 번째)
+  let filledCount = nextIndex === 0 ? 0 : nextIndex;
+  let idx = 0;
+  let html = `<div class="refline">${v.ref} (${filledCount}/${charSeq.length}자)</div>`;
+  words.forEach(w => {
+    const wLen = w.length;
+    let filledInWord = 0;
+    for (let i=0;i<wLen;i++) {
+      if (idx < filledCount) filledInWord++;
+      idx++;
+    }
+    if (filledInWord === wLen) {
+      html += `<span class="filled">${w}</span> `;
+    } else if (filledInWord > 0) {
+      html += `<span class="filled">${w.slice(0,filledInWord)}</span><span class="pending">${w.slice(filledInWord)}</span> `;
+    } else {
+      html += `<span class="pending">${w}</span> `;
+    }
+  });
+  progressBox.innerHTML = html;
+}
+
+/* ===================== 렌더링 ===================== */
+function drawCell(context, x, y, size, ch, color, ghost) {
+  context.fillStyle = ghost ? 'rgba(255,255,255,0.08)' : color;
+  context.strokeStyle = ghost ? 'rgba(255,255,255,0.2)' : 'rgba(255,255,255,0.6)';
+  context.lineWidth = 1.5;
+  context.beginPath();
+  const r = 4;
+  context.moveTo(x+r,y);
+  context.arcTo(x+size,y,x+size,y+size,r);
+  context.arcTo(x+size,y+size,x,y+size,r);
+  context.arcTo(x,y+size,x,y,r);
+  context.arcTo(x,y,x+size,y,r);
+  context.closePath();
+  context.fill();
+  context.stroke();
+  if (ch && !ghost) {
+    context.fillStyle = '#0a1330';
+    context.font = `bold ${Math.floor(size*0.5)}px 'Malgun Gothic', sans-serif`;
+    context.textAlign = 'center';
+    context.textBaseline = 'middle';
+    context.fillText(ch, x+size/2, y+size/2+1);
+  }
+}
+
+function draw() {
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  // 배경 그리드 라인
+  ctx.strokeStyle = 'rgba(255,255,255,0.05)';
+  for (let c=0;c<=COLS;c++){
+    ctx.beginPath(); ctx.moveTo(c*CELL,0); ctx.lineTo(c*CELL, ROWS*CELL); ctx.stroke();
+  }
+  for (let r=0;r<=ROWS;r++){
+    ctx.beginPath(); ctx.moveTo(0,r*CELL); ctx.lineTo(COLS*CELL, r*CELL); ctx.stroke();
+  }
+  // 고정된 블록
+  for (let r=0;r<ROWS;r++){
+    for (let c=0;c<COLS;c++){
+      const cell = grid[r][c];
+      if (cell) drawCell(ctx, c*CELL, r*CELL, CELL, cell.ch, cell.color, false);
+    }
+  }
+  // 고스트(낙하 예상 위치)
+  if (piece && !gameOver) {
+    let ghostRow = piece.row;
+    while (!collides(piece.matrix, ghostRow+1, piece.col)) ghostRow++;
+    const m = piece.matrix;
+    for (let r=0;r<m.length;r++){
+      for (let c=0;c<m[r].length;c++){
+        if (m[r][c]) {
+          const gr = ghostRow+r, gc = piece.col+c;
+          if (gr>=0) drawCell(ctx, gc*CELL, gr*CELL, CELL, null, COLORS[piece.key], true);
+        }
+      }
+    }
+    // 현재 조각
+    for (let r=0;r<m.length;r++){
+      for (let c=0;c<m[r].length;c++){
+        if (m[r][c]) {
+          const gr = piece.row+r, gc = piece.col+c;
+          if (gr>=0) drawCell(ctx, gc*CELL, gr*CELL, CELL, piece.chars[r+','+c], COLORS[piece.key], false);
+        }
+      }
+    }
+  }
+}
+
+function drawNext() {
+  nextCtx.clearRect(0,0,nextCanvas.width,nextCanvas.height);
+  if (!nextPiece) return;
+  const matrix = SHAPES[nextPiece.key][0];
+  const size = matrix.length;
+  const cell = Math.floor(60/4);
+  const offset = Math.floor((4-size)/2);
+  for (let r=0;r<size;r++){
+    for (let c=0;c<size;c++){
+      if (matrix[r][c]) {
+        drawCell(nextCtx, (c+offset)*cell, (r+offset)*cell, cell, null, COLORS[nextPiece.key], false);
+      }
+    }
+  }
+}
+
+/* ===================== 게임 루프 ===================== */
+function loop(timestamp) {
+  if (gameOver) { draw(); return; }
+  if (!paused) {
+    const delta = timestamp - lastTime;
+    lastTime = timestamp;
+    dropCounter += delta;
+    const interval = softDrop ? Math.max(40, dropInterval/8) : dropInterval;
+    if (dropCounter > interval) {
+      dropCounter = 0;
+      if (!collides(piece.matrix, piece.row+1, piece.col)) {
+        piece.row += 1;
+      } else {
+        lockPiece();
+      }
+    }
+    draw();
+  } else {
+    lastTime = timestamp;
+  }
+  requestAnimationFrame(loop);
+}
+
+function endGame(won) {
+  gameOver = true;
+  msgEl.style.display = 'block';
+  msgEl.textContent = won
+    ? `🎉 암송 완료!\n점수: ${score}`
+    : `😢 게임 오버\n점수: ${score}\n다시 도전해보세요!`;
+}
+
+/* ===================== 컨트롤 ===================== */
+document.getElementById('leftBtn').addEventListener('click', () => tryMove(-1));
+document.getElementById('rightBtn').addEventListener('click', () => tryMove(1));
+document.getElementById('rotateBtn').addEventListener('click', () => tryRotate());
+document.getElementById('dropBtn').addEventListener('click', () => hardDrop());
+
+document.getElementById('pauseBtn').addEventListener('click', () => {
+  if (gameOver) return;
+  paused = !paused;
+  document.getElementById('pauseBtn').textContent = paused ? '계속하기' : '일시정지';
+});
+document.getElementById('restartBtn').addEventListener('click', initGame);
+
+document.querySelectorAll('.verseBtn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.verseBtn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    currentVerseKey = btn.dataset.v;
+    initGame();
+  });
+});
+
+// 키보드 지원 (PC 테스트용)
+window.addEventListener('keydown', (e) => {
+  if (['ArrowLeft','ArrowRight','ArrowUp','ArrowDown',' '].includes(e.key)) e.preventDefault();
+  if (e.key === 'ArrowLeft') tryMove(-1);
+  else if (e.key === 'ArrowRight') tryMove(1);
+  else if (e.key === 'ArrowUp') tryRotate();
+  else if (e.key === 'ArrowDown') softDrop = true;
+  else if (e.key === ' ') hardDrop();
+});
+window.addEventListener('keyup', (e) => {
+  if (e.key === 'ArrowDown') softDrop = false;
+});
+
+window.addEventListener('resize', () => { resizeCanvas(); });
+
+/* ===================== 시작 ===================== */
+const bgMusic = document.getElementById('bgMusic');
+bgMusic.volume = 0.3;
+bgMusic.play().catch(err => {
+  console.log('음악 자동재생 차단됨, 사용자 인터랙션 필요');
+});
+
+initGame();
+</script>
+</body>
+</html>
