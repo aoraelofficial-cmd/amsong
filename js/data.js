@@ -1,11 +1,11 @@
 // 2026년 하반기 암송장 제자훈련 데이터
 const TRAINING_DATA = [
     {
-        date: '8월 30일',
-        relayAmsong: 'audio/relay_amsong1.mp3',
+        date: '9월 6일',
+        relayAmsong: 'audio/relayamsong0906.mp3',
         verses: [
-            { ref: '마 4:19', text: '말씀하시되 나를 따라오라 내가 너희를 사람을 낚는 어부가 되게 하리라 하시니', audio: 'audio/ma419.mp3' },
-            { ref: '요 20:21', text: '예수께서 또 이르시되 너희에게 평강이 있을지어다 아버지께서 나를 보내신 것 같이 나도 너희를 보내노라', audio: 'audio/yo2021.mp3' }
+            { ref: '롬 11:36', text: '이는 만물이 주에게서 나오고 주로 말미암고 주에게로 돌아감이라 그에게 영광이 세세에 있을지어다 아멘', audio: 'audio/rom11.mp3' },
+            { ref: '엡 4:22-24', text: '너희는 유혹의 욕심을 따라 썩어져 가는 구습을 따르는 옛 사람을 벗어 버리고 오직 너희의 심령이 새롭게 되어 하나님을 따라 의와 진리의 거룩함으로 지으심을 받은 새 사람을 입으라', audio: 'audio/ev4.mp3' }
         ]
     }
 ];
