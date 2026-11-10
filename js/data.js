@@ -1,6 +1,14 @@
 // 2026년 하반기 암송장 제자훈련 데이터
 const TRAINING_DATA = [
     {
+        date: '11월 22일',
+        relayAmsong: 'audio/relayamsong1122.mp3',
+        verses: [
+            { ref: '히 11:6', text: '믿음이 없이는 하나님을 기쁘시게 하지 못하나니 하나님께 나아가는 자는 반드시 그가 계신 것과 또한 그가 자기를 찾는 자들에게 상 주시는 이심을 믿어야 할지니라', audio: 'audio/he11.mp3' },
+            { ref: '히 12:2', text: '믿음의 주요 또 온전하게 하시는 이인 예수를 바라보자 그는 그 앞에 있는 기쁨을 위하여 십자가를 참으사 부끄러움을 개의치 아니하시더니 하나님 보좌 우편에 앉으셨느니라', audio: 'audio/he12.mp3' }
+        ]
+    },
+    {
         date: '11월 8일',
         relayAmsong: 'audio/relayamsong1108.mp3',
         verses: [
